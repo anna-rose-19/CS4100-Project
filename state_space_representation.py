@@ -1,0 +1,87 @@
+import geopandas as gpd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from shapely.geometry import box
+
+# so I think a way to represent for right now at least with the geopandas could be like
+# overlaying a grid on top of boston and each grid cell is one index in the chromosome.
+# 1 means put a store in that area, 0 means don't.
+# I'm not sure how to pick exact adresses so I think this right now is picking like a grid cell
+# or a zone on the map that is 0.5 miles by 0.5 miles 
+# and then we can pick a random point in that cell to be the store location and try to optimize
+# which cell is gonna maximize our fitness function. Then for an actual store location
+# we would have ot go to that zone and check if an an empty lot or commercial space is open. 
+neighborhoods = gpd.read_file(
+    "Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp"
+)
+
+minx, miny, maxx, maxy = neighborhoods.total_bounds
+# chose this size becuase i think it estimates to around 100 cells in the gird and translates
+# to like 0.5 miles by 0.5 miles.
+CELLSIZE = 2500
+
+cols = np.arange(minx, maxx, CELLSIZE)
+rows = np.arange(miny, maxy, CELLSIZE)
+
+grid_cells = []
+for x in cols:
+    for y in rows:
+        cell = box(x, y, x + CELLSIZE, y + CELLSIZE)
+        grid_cells.append(cell)
+
+grid = gpd.GeoDataFrame(geometry=grid_cells, crs=neighborhoods.crs)
+
+# cells should only overlap Boston
+boston_boundary = neighborhoods.union_all()
+grid["in_boston"] = grid.geometry.intersects(boston_boundary)
+candidates = grid[grid["in_boston"]].copy().reset_index(drop=True)
+
+# Give each cell its own index
+candidates["cell_idx"] = range(len(candidates))
+print(f"Chromosome length: {len(candidates)}")
+
+# Try to place 10 stores randomly on the grid. I think 10 is good to start with can see later?
+n = len(candidates)
+chromosome = np.zeros(n, dtype=int)
+store_indices = np.random.choice(n, size=10, replace=False)
+chromosome[store_indices] = 1
+candidates["has_store"] = chromosome
+
+
+## PLOTS TO SEE 
+fig, axes = plt.subplots(1, 3, figsize=(22, 8))
+# gonna plot the original neighborhoods with labels
+ax1 = axes[0]
+neighborhoods.plot(ax=ax1, edgecolor="black", linewidth=1.5, color="#dbeafe")
+for col, row in neighborhoods.iterrows():
+    c = row.geometry.centroid
+    ax1.annotate(row["BlockGr202"], xy=(c.x, c.y), fontsize=6,
+                 ha="center", va="center", fontweight="bold", color="#1e3a5f")
+
+# Label every cell with its index for second map.
+ax2 = axes[1]
+neighborhoods.plot(ax=ax2, edgecolor="black", linewidth=1.5, color="#f1f5f9")
+candidates.plot(ax=ax2, edgecolor="#3b82f6", linewidth=0.8,
+                color="#dbeafe", alpha=0.5)
+
+for col, row in candidates.iterrows():
+    c = row.geometry.centroid
+    ax2.annotate(str(row["cell_idx"]), xy=(c.x, c.y), fontsize=6,
+                 ha="center", va="center", color="#1e40af", fontweight="bold")
+    
+# mark the cells with stores in a different color on the third map
+ax3 = axes[2]
+neighborhoods.plot(ax=ax3, edgecolor="black", linewidth=1.5, color="#f1f5f9")
+# Empty cells
+candidates[candidates["has_store"] == 0].plot(
+    ax=ax3, edgecolor="#cbd5e1", linewidth=0.3,
+    color="#f8fafc", alpha=0.3
+)
+# Store cells 
+candidates[candidates["has_store"] == 1].plot(
+    ax=ax3, edgecolor="#1d4ed8", linewidth=2,
+    color="#3b82f6", alpha=0.8
+)
+plt.tight_layout()
+plt.show()
