@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from shapely.geometry import box
+import pandas as pd
 
 # so I think a way to represent for right now at least with the geopandas could be like
 # overlaying a grid on top of boston and each grid cell is one index in the chromosome.
@@ -12,10 +13,23 @@ from shapely.geometry import box
 # and then we can pick a random point in that cell to be the store location and try to optimize
 # which cell is gonna maximize our fitness function. Then for an actual store location
 # we would have ot go to that zone and check if an an empty lot or commercial space is open. 
-neighborhoods = gpd.read_file(
-    "Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp"
+neighborhoods = gpd.read_file("/Users/annarose/Downloads/CS4100_ProjectCode/CS4100-Project/Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
+pop_data = pd.read_csv("Boston_Race_Ethnicity_2025.csv")
+
+# Convert population to numeric first
+pop_data["Total Population"] = pd.to_numeric(
+    pop_data["Total Population"].str.replace(",", ""), errors="coerce"
 )
 
+# Merge into neighborhoods shapefile
+neighborhoods = neighborhoods.merge(
+    pop_data[["Neighborhood", "Total Population"]],
+    left_on="BlockGr202",
+    right_on="Neighborhood",
+    how="left"
+)
+print(neighborhoods.head())
+neighborhoods["orig_area"] = neighborhoods.geometry.area
 minx, miny, maxx, maxy = neighborhoods.total_bounds
 # chose this size becuase i think it estimates to around 100 cells in the gird and translates
 # to like 0.5 miles by 0.5 miles.
@@ -48,7 +62,33 @@ store_indices = np.random.choice(n, size=10, replace=False)
 chromosome[store_indices] = 1
 candidates["has_store"] = chromosome
 
+candidate_cells = candidates[chromosome == 1].copy()
+candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)   
+print(neighborhoods.columns)
+def fitness_func(chromosome):
+    candidate_cells = candidates[chromosome == 1].copy()
+    total_score = 0
+    for _, candidate in candidate_cells.iterrows():
+        area = gpd.GeoDataFrame(
+            geometry=[candidate.geometry.buffer(CELLSIZE)],
+            crs=candidates.crs
+        )
+        overlap = gpd.overlay(neighborhoods, area, how="intersection")
+        if overlap.empty:
+            continue
+        overlap["overlap_area"] = overlap.geometry.area
 
+        overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
+    
+        population = (overlap["Total Population"] * overlap["weight"]).sum()
+        
+        score = (0.5 * population)
+
+        total_score += score
+    return total_score
+score = fitness_func(chromosome)
+print("Fitness score: ")
+print(score)
 ## PLOTS TO SEE 
 fig, axes = plt.subplots(1, 3, figsize=(22, 8))
 # gonna plot the original neighborhoods with labels
