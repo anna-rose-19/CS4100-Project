@@ -13,7 +13,7 @@ import pandas as pd
 # and then we can pick a random point in that cell to be the store location and try to optimize
 # which cell is gonna maximize our fitness function. Then for an actual store location
 # we would have ot go to that zone and check if an an empty lot or commercial space is open. 
-neighborhoods = gpd.read_file("/Users/annarose/Downloads/CS4100_ProjectCode/CS4100-Project/Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
+neighborhoods = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
 pop_data = pd.read_csv("Boston_Race_Ethnicity_2025.csv")
 
 # Convert population to numeric first
@@ -33,7 +33,7 @@ neighborhoods["orig_area"] = neighborhoods.geometry.area
 minx, miny, maxx, maxy = neighborhoods.total_bounds
 # chose this size becuase i think it estimates to around 100 cells in the gird and translates
 # to like 0.5 miles by 0.5 miles.
-CELLSIZE = 2500
+CELLSIZE = 5000
 
 cols = np.arange(minx, maxx, CELLSIZE)
 rows = np.arange(miny, maxy, CELLSIZE)
@@ -123,5 +123,29 @@ candidates[candidates["has_store"] == 1].plot(
     ax=ax3, edgecolor="#1d4ed8", linewidth=2,
     color="#3b82f6", alpha=0.8
 )
+plt.tight_layout()
+plt.show()
+
+# Overlay Current Grocery Store Coordinates Over Map
+stores_df = pd.read_csv("Boston Grocery stores - Sheet1.csv")
+
+stores_gdf = gpd.GeoDataFrame(
+    stores_df,
+    geometry=gpd.points_from_xy(stores_df["Longitude"], stores_df["Latitude"]),
+    crs="EPSG:4326"
+)
+
+# the store coordinates are in lat/lon but the map is in meters. 
+# this converts the stores to the same system as the map so they line up correctly.
+stores_gdf = stores_gdf.to_crs(neighborhoods.crs)
+
+fig, ax = plt.subplots(figsize=(10, 10))
+
+neighborhoods.plot(ax=ax, edgecolor="black", linewidth=1.2, color="#dbeafe", alpha=0.5)
+candidates.plot(ax=ax, edgecolor="#3b82f6", linewidth=0.5, color="#f0f9ff", alpha=0.4)
+stores_gdf.plot(ax=ax, color="red", markersize=40, marker="*", label="Existing Stores", zorder=5)
+
+ax.legend()
+ax.set_title("Existing Grocery Stores in Boston")
 plt.tight_layout()
 plt.show()
