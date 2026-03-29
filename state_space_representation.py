@@ -128,6 +128,7 @@ print("Fitness score: ")
 print(score)
 
 
+
 ## PLOTS TO SEE 
 fig, axes = plt.subplots(1, 3, figsize=(22, 8))
 # gonna plot the original neighborhoods with labels
