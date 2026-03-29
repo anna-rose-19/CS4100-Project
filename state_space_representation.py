@@ -14,7 +14,9 @@ import pandas as pd
 # which cell is gonna maximize our fitness function. Then for an actual store location
 # we would have ot go to that zone and check if an an empty lot or commercial space is open. 
 neighborhoods = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
+neighborhoods3 = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
 pop_data = pd.read_csv("Boston_Race_Ethnicity_2025.csv")
+health_data = pd.read_csv("/Users/annarose/Downloads/CS4100_ProjectCode/CS4100-Project/Hypertension Percentage by Boston Neighborhood(Sheet1).csv")
 income_data = pd.read_csv("Boston_Household_Income_2024.csv")
 
 # Convert population to numeric first
@@ -22,6 +24,9 @@ pop_data["Total Population"] = pd.to_numeric(
     pop_data["Total Population"].str.replace(",", ""), errors="coerce"
 )
 
+#Convert health data to numeric
+health_data["Estimate"] = pd.to_numeric(
+    health_data["Estimate"].astype(str).str.replace(",", ""),
 # Convert income to numeric first
 income_data["Median Household Income"] = pd.to_numeric(
     income_data["Median Household Income"].str.replace("$", "").str.replace(",", ""),
@@ -36,6 +41,13 @@ neighborhoods = neighborhoods.merge(
     how="left"
 )
 
+# Merge into neighborhoods shapefile
+neighborhoods = neighborhoods.merge(
+    health_data[["Neighborhood", "Estimate"]],
+    left_on="BlockGr202",
+    right_on="Neighborhood",
+    how="left"
+)
 neighborhoods = neighborhoods.merge(
     income_data[["Neighborhood","Median Household Income"]],
     left_on="BlockGr202",
@@ -77,6 +89,7 @@ store_indices = np.random.choice(n, size=10, replace=False)
 chromosome[store_indices] = 1
 candidates["has_store"] = chromosome
 
+
 candidate_cells = candidates[chromosome == 1].copy()
 candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)   
 print(neighborhoods.columns)
@@ -115,12 +128,24 @@ def fitness_func(chromosome):
             continue
         overlap["overlap_area"] = overlap.geometry.area
 
-        overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
-    
-        population = (overlap["Total Population"] * overlap["weight"]).sum()
-        
-        score = (0.5 * population + income_fitness_func(candidate) * population)
 
+        #overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
+    
+        buffer_area = area.geometry.area.iloc[0]
+        overlap["weight"] = overlap["overlap_area"] / buffer_area
+        population = (overlap["Total Population"] * overlap["weight"]).sum()
+
+        health = (overlap["Estimate"] * overlap["weight"]).sum()
+
+        print("Weights:", overlap["weight"].values) 
+        print("Sum of weights:", overlap["weight"].sum())
+        
+        score = ((0.5 * population) + (0.3 * health) + income_fitness_func(candidate) * population)
+        print(f"Candidate cell {candidate['cell_idx']}")
+        print(f"Population {population:.2f})")
+        print(f"Health {health:.2f}")
+        print(f"Neighborhood: {overlap['BlockGr202'].tolist()}")
+       
         total_score += score
     return total_score
 score = fitness_func(chromosome)
