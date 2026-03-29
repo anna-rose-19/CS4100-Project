@@ -17,6 +17,7 @@ neighborhoods = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighbo
 neighborhoods3 = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
 pop_data = pd.read_csv("Boston_Race_Ethnicity_2025.csv")
 health_data = pd.read_csv("/Users/annarose/Downloads/CS4100_ProjectCode/CS4100-Project/Hypertension Percentage by Boston Neighborhood(Sheet1).csv")
+income_data = pd.read_csv("Boston_Household_Income_2024.csv")
 
 # Convert population to numeric first
 pop_data["Total Population"] = pd.to_numeric(
@@ -26,6 +27,9 @@ pop_data["Total Population"] = pd.to_numeric(
 #Convert health data to numeric
 health_data["Estimate"] = pd.to_numeric(
     health_data["Estimate"].astype(str).str.replace(",", ""),
+# Convert income to numeric first
+income_data["Median Household Income"] = pd.to_numeric(
+    income_data["Median Household Income"].str.replace("$", "").str.replace(",", ""),
     errors="coerce"
 )
 
@@ -44,6 +48,13 @@ neighborhoods = neighborhoods.merge(
     right_on="Neighborhood",
     how="left"
 )
+neighborhoods = neighborhoods.merge(
+    income_data[["Neighborhood","Median Household Income"]],
+    left_on="BlockGr202",
+    right_on="Neighborhood",
+    how="left"
+)
+
 print(neighborhoods.head())
 neighborhoods["orig_area"] = neighborhoods.geometry.area
 minx, miny, maxx, maxy = neighborhoods.total_bounds
@@ -83,6 +94,26 @@ candidate_cells = candidates[chromosome == 1].copy()
 candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)   
 print(neighborhoods.columns)
 
+def income_fitness_func(candidate):
+    area = gpd.GeoDataFrame(
+        geometry=[candidate.geometry.buffer(CELLSIZE)],
+        crs=candidates.crs
+    )
+    overlap = gpd.overlay(neighborhoods, area, how="intersection")
+    if overlap.empty:
+        return -1000
+    overlap["overlap_area"] = overlap.geometry.area
+    num_regions = len(overlap)
+
+    overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
+    
+    income = (overlap["Total Population"] * overlap["weight"]).sum()
+        
+    if income == 0:
+        return -1000
+    income_coeff = (1 / (income/num_regions))
+    print(income_coeff)
+    return income_coeff
 
 def fitness_func(chromosome):
     candidate_cells = candidates[chromosome == 1].copy()
@@ -109,17 +140,19 @@ def fitness_func(chromosome):
         print("Weights:", overlap["weight"].values) 
         print("Sum of weights:", overlap["weight"].sum())
         
-        score = ((0.5 * population) + (0.3 * health))
+        score = ((0.5 * population) + (0.3 * health) + income_fitness_func(candidate) * population)
         print(f"Candidate cell {candidate['cell_idx']}")
         print(f"Population {population:.2f})")
         print(f"Health {health:.2f}")
         print(f"Neighborhood: {overlap['BlockGr202'].tolist()}")
-
+       
         total_score += score
     return total_score
 score = fitness_func(chromosome)
 print("Fitness score: ")
 print(score)
+
+
 ## PLOTS TO SEE 
 fig, axes = plt.subplots(1, 3, figsize=(22, 8))
 # gonna plot the original neighborhoods with labels
