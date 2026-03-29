@@ -16,7 +16,7 @@ import pandas as pd
 neighborhoods = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
 neighborhoods3 = gpd.read_file("Census2020_BG_Neighborhoods/Census2020_BG_Neighborhoods.shp")
 pop_data = pd.read_csv("Boston_Race_Ethnicity_2025.csv")
-health_data = pd.read_csv("/Users/annarose/Downloads/CS4100_ProjectCode/CS4100-Project/Hypertension Percentage by Boston Neighborhood(Sheet1).csv")
+health_data = pd.read_csv("Hypertension Percentage by Boston Neighborhood(Sheet1).csv")
 income_data = pd.read_csv("Boston_Household_Income_2024.csv")
 
 # Convert population to numeric first
@@ -26,7 +26,8 @@ pop_data["Total Population"] = pd.to_numeric(
 
 #Convert health data to numeric
 health_data["Estimate"] = pd.to_numeric(
-    health_data["Estimate"].astype(str).str.replace(",", ""),
+    health_data["Estimate"].astype(str).str.replace(",", ""), errors="coerce"
+)
 # Convert income to numeric first
 income_data["Median Household Income"] = pd.to_numeric(
     income_data["Median Household Income"].str.replace("$", "").str.replace(",", ""),
@@ -151,6 +152,7 @@ def fitness_func(chromosome):
 score = fitness_func(chromosome)
 print("Fitness score: ")
 print(score)
+
 
 
 ## PLOTS TO SEE 
