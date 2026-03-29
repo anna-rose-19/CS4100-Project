@@ -62,6 +62,42 @@ store_indices = np.random.choice(n, size=10, replace=False)
 chromosome[store_indices] = 1
 candidates["has_store"] = chromosome
 
+# This will check how many people are already being served by an existing grocery store. 
+# Function will find which existing stores are close to the given candidate cell.
+# Does this measuring the distance from each of the 59 existing stores
+# to the center of the candidate cell. if a store is within CELLSIZE, it counts as nearby_store.
+# Then for each nearby store, figure out how many people it already serves. add all of that up into already_served.
+
+stores_df = pd.read_csv("Boston Grocery stores - Sheet1.csv")
+stores_gdf = gpd.GeoDataFrame(
+    stores_df,
+    geometry=gpd.points_from_xy(stores_df["Longitude"], stores_df["Latitude"]),
+    crs="EPSG:4326"
+)
+# the store coordinates are in lat/lon but the map is in meters. 
+# this converts the stores to the same system as the map so they line up correctly.
+stores_gdf = stores_gdf.to_crs(neighborhoods.crs)
+
+def penalize_existing_stores(candidate, neighborhoods, existing_stores_gdf, CELLSIZE):
+    candidate_center = candidate.geometry.centroid
+    nearby_stores = existing_stores_gdf[
+        existing_stores_gdf.geometry.distance(candidate_center) <= CELLSIZE
+    ]
+    already_served = 0
+    for _, store in nearby_stores.iterrows():
+        store_area = gpd.GeoDataFrame(
+            geometry=[store.geometry.buffer(CELLSIZE)],
+            crs=existing_stores_gdf.crs
+        )
+        store_overlap = gpd.overlay(neighborhoods, store_area, how="intersection")
+        if store_overlap.empty:
+            continue
+        store_overlap["overlap_area"] = store_overlap.geometry.area
+        store_overlap["weight"] = store_overlap["overlap_area"] / store_overlap["orig_area"]
+        already_served += (store_overlap["Total Population"] * store_overlap["weight"]).sum()
+
+    return already_served
+
 candidate_cells = candidates[chromosome == 1].copy()
 candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)   
 print(neighborhoods.columns)
@@ -81,8 +117,12 @@ def fitness_func(chromosome):
         overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
     
         population = (overlap["Total Population"] * overlap["weight"]).sum()
-        
-        score = (0.5 * population)
+
+        already_served = penalize_existing_stores(candidate, neighborhoods, stores_gdf, CELLSIZE)
+         
+        # the score purely based on population served but then we 
+        # subtract some fraction of the already-covered population
+        score = population - (0.5 * already_served) 
 
         total_score += score
     return total_score
@@ -127,18 +167,6 @@ plt.tight_layout()
 plt.show()
 
 # Overlay Current Grocery Store Coordinates Over Map
-stores_df = pd.read_csv("Boston Grocery stores - Sheet1.csv")
-
-stores_gdf = gpd.GeoDataFrame(
-    stores_df,
-    geometry=gpd.points_from_xy(stores_df["Longitude"], stores_df["Latitude"]),
-    crs="EPSG:4326"
-)
-
-# the store coordinates are in lat/lon but the map is in meters. 
-# this converts the stores to the same system as the map so they line up correctly.
-stores_gdf = stores_gdf.to_crs(neighborhoods.crs)
-
 fig, ax = plt.subplots(figsize=(10, 10))
 
 neighborhoods.plot(ax=ax, edgecolor="black", linewidth=1.2, color="#dbeafe", alpha=0.5)
