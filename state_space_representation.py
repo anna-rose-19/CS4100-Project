@@ -173,12 +173,19 @@ def fitness_func(chromosome):
 
         already_served = penalize_existing_stores(candidate, neighborhoods, stores_gdf, CELLSIZE)
 
+        # gives what percentage of the population in the candidate cell is already being served by an existing store.
+        # for example if the candidate cell has 10,000 people in it and the nearby stores 
+        # are already serving 7,000 of those people, then the coverage ratio would be 0.7.
+        coverage_ratio = min(already_served / population if population > 0 else 1, 1)
+
         health = (overlap["Estimate"] * overlap["weight"]).sum()
 
         print("Weights:", overlap["weight"].values) 
         print("Sum of weights:", overlap["weight"].sum())
-        
-        score = ((0.5 * (population - already_served)) + (0.3 * health) + income_fitness_func(candidate) * population)
+
+        # so this would be (0.5 * 10000)(1 - 0.7) = 1,500
+        #  So placing a store here only gives you 30% of the reward you'd get in a completely uncovered area.
+        score = ((0.5 * population)*(1 - coverage_ratio) + (0.3 * health) + income_fitness_func(candidate) * population)
         print(f"Candidate cell {candidate['cell_idx']}")
         print(f"Population {population:.2f})")
         print(f"Health {health:.2f}")
