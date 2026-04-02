@@ -159,7 +159,57 @@ if __name__ == "__main__":
     print("Fitness score: ")
     print(score)
 
+# pop is all generated chromosomes, fitness is an array of their scores, 
+# and k is how many we are comapring for the tournament selection.
+# we will run this 4? times to select parents for next gen --> not most greedy solution but prevents local optima
+def selection(pop, fitness, k): 
+    competitors = np.random.choice(len(pop), size=k, replace=False) #select k random chromosomes to comapare
+    winner = competitors[0]
+    for i in competitors:
+        if fitness[i] < fitness[winner]:
+            winner = i
+    return pop[winner]
 
+def mutate_swap(chromosome, n_swaps=1):
+    """
+    Move n_swaps stores to randomly chosen empty cells.
+    Always preserves exactly N_STORES stores in the chromosome.
+    """
+    mutant = chromosome.copy()
+    store_idxs = np.where(mutant == 1)[0]
+    empty_idxs = np.where(mutant == 0)[0]
+
+    n_swaps = min(n_swaps, len(store_idxs), len(empty_idxs))
+
+    removes = np.random.choice(store_idxs, size=n_swaps, replace=False)
+    adds    = np.random.choice(empty_idxs,  size=n_swaps, replace=False)
+
+    mutant[removes] = 0
+    mutant[adds]    = 1
+
+    return mutant
+
+def mutate(chromosome):
+    if np.random.rand() > MUTATION_RATE:
+        return chromosome.copy()           # no mutation
+
+    if np.random.rand() < MULTISWAP_PROB:
+        return mutate_swap(chromosome, n_swaps=3)  # big jump
+    
+    return mutate_swap(chromosome, n_swaps=1)      # small move
+
+def new_generation(pop, fitness, num_children):
+    new_pop = []
+    init = num_children / 2 - 1
+    for _ in range(init):
+        parent = selection(pop, fitness, k=4)
+        new_pop.append(parent)
+        child = mutate(parent)
+        new_pop.append(child)
+    rand = num_children - len(new_pop)
+    #for _ in range(rand):
+        #randomly generate new chromosome to maintain diversity
+    return np.array(new_pop)
 
 ## PLOTS TO SEE 
 fig, axes = plt.subplots(1, 3, figsize=(22, 8))
@@ -222,30 +272,3 @@ ax.set_title("Existing Grocery Stores in Boston")
 plt.tight_layout()
 plt.show()
 
-def mutate_swap(chromosome, n_swaps=1):
-    """
-    Move n_swaps stores to randomly chosen empty cells.
-    Always preserves exactly N_STORES stores in the chromosome.
-    """
-    mutant = chromosome.copy()
-    store_idxs = np.where(mutant == 1)[0]
-    empty_idxs = np.where(mutant == 0)[0]
-
-    n_swaps = min(n_swaps, len(store_idxs), len(empty_idxs))
-
-    removes = np.random.choice(store_idxs, size=n_swaps, replace=False)
-    adds    = np.random.choice(empty_idxs,  size=n_swaps, replace=False)
-
-    mutant[removes] = 0
-    mutant[adds]    = 1
-
-    return mutant
-
-def mutate(chromosome):
-    if np.random.rand() > MUTATION_RATE:
-        return chromosome.copy()           # no mutation
-
-    if np.random.rand() < MULTISWAP_PROB:
-        return mutate_swap(chromosome, n_swaps=3)  # big jump
-    
-    return mutate_swap(chromosome, n_swaps=1)      # small move
