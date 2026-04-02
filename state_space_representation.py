@@ -153,6 +153,17 @@ score = fitness_func(chromosome)
 print("Fitness score: ")
 print(score)
 
+# pop is all generated chromosomes, fitness is an array of their scores, 
+# and k is how many we are comapring for the tournament selection.
+# we will run this 4? times to select parents for next gen --> not most greedy solution but prevents local optima
+def selection(pop, fitness, k): 
+    competitors = np.random.choice(len(pop), size=k, replace=False) #select k random chromosomes to comapare
+    winner = competitors[0]
+    for i in competitors:
+        if fitness[i] < fitness[winner]:
+            winner = i
+    return pop[winner]
+
 
 
 ## PLOTS TO SEE 
