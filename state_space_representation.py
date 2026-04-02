@@ -96,6 +96,41 @@ store_indices = np.random.choice(n, size=10, replace=False)
 chromosome[store_indices] = 1
 candidates["has_store"] = chromosome
 
+# This will check how many people are already being served by an existing grocery store. 
+# Function will find which existing stores are close to the given candidate cell.
+# Does this measuring the distance from each of the 59 existing stores
+# to the center of the candidate cell. if a store is within CELLSIZE, it counts as nearby_store.
+# Then for each nearby store, figure out how many people it already serves. add all of that up into already_served.
+
+stores_df = pd.read_csv("Boston Grocery stores - Sheet1.csv")
+stores_gdf = gpd.GeoDataFrame(
+    stores_df,
+    geometry=gpd.points_from_xy(stores_df["Longitude"], stores_df["Latitude"]),
+    crs="EPSG:4326"
+)
+# the store coordinates are in lat/lon but the map is in meters. 
+# this converts the stores to the same system as the map so they line up correctly.
+stores_gdf = stores_gdf.to_crs(neighborhoods.crs)
+
+def penalize_existing_stores(candidate, neighborhoods, existing_stores_gdf, CELLSIZE):
+    candidate_center = candidate.geometry.centroid
+    nearby_stores = existing_stores_gdf[
+        existing_stores_gdf.geometry.distance(candidate_center) <= CELLSIZE
+    ]
+    already_served = 0
+    for _, store in nearby_stores.iterrows():
+        store_area = gpd.GeoDataFrame(
+            geometry=[store.geometry.buffer(CELLSIZE)],
+            crs=existing_stores_gdf.crs
+        )
+        store_overlap = gpd.overlay(neighborhoods, store_area, how="intersection")
+        if store_overlap.empty:
+            continue
+        store_overlap["overlap_area"] = store_overlap.geometry.area
+        store_overlap["weight"] = store_overlap["overlap_area"] / store_overlap["orig_area"]
+        already_served += (store_overlap["Total Population"] * store_overlap["weight"]).sum()
+
+    return already_served
 
 candidate_cells = candidates[chromosome == 1].copy()
 candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)  
@@ -144,12 +179,21 @@ def fitness_func(chromosome):
         overlap["weight"] = overlap["overlap_area"] / buffer_area
         population = (overlap["Total Population"] * overlap["weight"]).sum()
 
+        already_served = penalize_existing_stores(candidate, neighborhoods, stores_gdf, CELLSIZE)
+
+        # gives what percentage of the population in the candidate cell is already being served by an existing store.
+        # for example if the candidate cell has 10,000 people in it and the nearby stores 
+        # are already serving 7,000 of those people, then the coverage ratio would be 0.7.
+        coverage_ratio = min(already_served / population if population > 0 else 1, 1)
+
         health = (overlap["Estimate"] * overlap["weight"]).sum()
 
         #print("Weights:", overlap["weight"].values) 
         #print("Sum of weights:", overlap["weight"].sum())
-        
-        score = ((0.5 * population) + (0.3 * health) + income_fitness_func(candidate) * population)
+
+        # so this would be (0.5 * 10000)(1 - 0.7) = 1,500
+        #  So placing a store here only gives you 30% of the reward you'd get in a completely uncovered area.
+        score = ((0.5 * population)*(1 - coverage_ratio) + (0.3 * health) + income_fitness_func(candidate) * population)
         #print(f"Candidate cell {candidate['cell_idx']}")
         #print(f"Population {population:.2f})")
         #print(f"Health {health:.2f}")
@@ -253,18 +297,6 @@ plt.tight_layout()
 plt.show()
 
 # Overlay Current Grocery Store Coordinates Over Map
-stores_df = pd.read_csv("Boston Grocery stores - Sheet1.csv")
-
-stores_gdf = gpd.GeoDataFrame(
-    stores_df,
-    geometry=gpd.points_from_xy(stores_df["Longitude"], stores_df["Latitude"]),
-    crs="EPSG:4326"
-)
-
-# the store coordinates are in lat/lon but the map is in meters. 
-# this converts the stores to the same system as the map so they line up correctly.
-stores_gdf = stores_gdf.to_crs(neighborhoods.crs)
-
 fig, ax = plt.subplots(figsize=(10, 10))
 
 neighborhoods.plot(ax=ax, edgecolor="black", linewidth=1.2, color="#dbeafe", alpha=0.5)
