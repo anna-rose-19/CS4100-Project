@@ -5,6 +5,11 @@ from matplotlib.patches import Patch
 from shapely.geometry import box
 import pandas as pd
 
+N_STORES       = 10
+CELLSIZE = 5000
+MUTATION_RATE  = 0.7
+MULTISWAP_PROB = 0.15
+
 # so I think a way to represent for right now at least with the geopandas could be like
 # overlaying a grid on top of boston and each grid cell is one index in the chromosome.
 # 1 means put a store in that area, 0 means don't.
@@ -61,7 +66,6 @@ neighborhoods["orig_area"] = neighborhoods.geometry.area
 minx, miny, maxx, maxy = neighborhoods.total_bounds
 # chose this size becuase i think it estimates to around 100 cells in the gird and translates
 # to like 0.5 miles by 0.5 miles.
-CELLSIZE = 5000
 
 cols = np.arange(minx, maxx, CELLSIZE)
 rows = np.arange(miny, maxy, CELLSIZE)
@@ -148,7 +152,7 @@ def income_fitness_func(candidate):
     if income == 0:
         return -1000
     income_coeff = (1 / (income/num_regions))
-    print(income_coeff)
+    #print(income_coeff)
     return income_coeff
 
 def fitness_func(chromosome):
@@ -180,24 +184,76 @@ def fitness_func(chromosome):
 
         health = (overlap["Estimate"] * overlap["weight"]).sum()
 
-        print("Weights:", overlap["weight"].values) 
-        print("Sum of weights:", overlap["weight"].sum())
+        #print("Weights:", overlap["weight"].values) 
+        #print("Sum of weights:", overlap["weight"].sum())
 
         # so this would be (0.5 * 10000)(1 - 0.7) = 1,500
         #  So placing a store here only gives you 30% of the reward you'd get in a completely uncovered area.
         score = ((0.5 * population)*(1 - coverage_ratio) + (0.3 * health) + income_fitness_func(candidate) * population)
-        print(f"Candidate cell {candidate['cell_idx']}")
-        print(f"Population {population:.2f})")
-        print(f"Health {health:.2f}")
-        print(f"Neighborhood: {overlap['BlockGr202'].tolist()}")
+        #print(f"Candidate cell {candidate['cell_idx']}")
+        #print(f"Population {population:.2f})")
+        #print(f"Health {health:.2f}")
+        #print(f"Neighborhood: {overlap['BlockGr202'].tolist()}")
        
         total_score += score
     return total_score
-score = fitness_func(chromosome)
-print("Fitness score: ")
-print(score)
 
+if __name__ == "__main__":
+    score = fitness_func(chromosome)
+    print("Fitness score: ")
+    print(score)
 
+# pop is all generated chromosomes, fitness is an array of their scores, 
+# and k is how many we are comapring for the tournament selection.
+# we will run this 4? times to select parents for next gen --> not most greedy solution but prevents local optima
+def selection(pop, fitness, k): 
+    competitors = np.random.choice(len(pop), size=k, replace=False) #select k random chromosomes to comapare
+    winner = competitors[0]
+    for i in competitors:
+        if fitness[i] < fitness[winner]:
+            winner = i
+    return pop[winner]
+
+def mutate_swap(chromosome, n_swaps=1):
+    """
+    Move n_swaps stores to randomly chosen empty cells.
+    Always preserves exactly N_STORES stores in the chromosome.
+    """
+    mutant = chromosome.copy()
+    store_idxs = np.where(mutant == 1)[0]
+    empty_idxs = np.where(mutant == 0)[0]
+
+    n_swaps = min(n_swaps, len(store_idxs), len(empty_idxs))
+
+    removes = np.random.choice(store_idxs, size=n_swaps, replace=False)
+    adds    = np.random.choice(empty_idxs,  size=n_swaps, replace=False)
+
+    mutant[removes] = 0
+    mutant[adds]    = 1
+
+    return mutant
+
+def mutate(chromosome):
+    if np.random.rand() > MUTATION_RATE:
+        return chromosome.copy()           # no mutation
+
+    if np.random.rand() < MULTISWAP_PROB:
+        return mutate_swap(chromosome, n_swaps=3)  # big jump
+    
+    return mutate_swap(chromosome, n_swaps=1)      # small move
+
+def new_generation(pop, fitness, num_children):
+    new_pop = []
+    init = num_children / 2 - 1
+    for _ in range(init):
+        parent = selection(pop, fitness, k=4)
+        new_pop.append(parent)
+        child = mutate(parent)
+        new_pop.append(child)
+    rand = num_children - len(new_pop)
+    #for _ in range(rand):
+        #randomly generate new chromosome to maintain diversity
+    return np.array(new_pop)
 
 ## PLOTS TO SEE 
 fig, axes = plt.subplots(1, 3, figsize=(22, 8))
@@ -247,3 +303,4 @@ ax.legend()
 ax.set_title("Existing Grocery Stores in Boston")
 plt.tight_layout()
 plt.show()
+
