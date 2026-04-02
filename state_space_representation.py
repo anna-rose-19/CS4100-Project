@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from shapely.geometry import box
 import pandas as pd
+import warnings
 
 N_STORES       = 10
 CELLSIZE = 5000
@@ -64,6 +65,7 @@ neighborhoods = neighborhoods.merge(
 print(neighborhoods.head())
 neighborhoods["orig_area"] = neighborhoods.geometry.area
 minx, miny, maxx, maxy = neighborhoods.total_bounds
+
 # chose this size becuase i think it estimates to around 100 cells in the gird and translates
 # to like 0.5 miles by 0.5 miles.
 
@@ -96,8 +98,9 @@ candidates["has_store"] = chromosome
 
 
 candidate_cells = candidates[chromosome == 1].copy()
-candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)   
+candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)  
 print(neighborhoods.columns)
+
 
 def income_fitness_func(candidate):
     area = gpd.GeoDataFrame(
@@ -137,6 +140,7 @@ def fitness_func(chromosome):
         #overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
     
         buffer_area = area.geometry.area.iloc[0]
+        
         overlap["weight"] = overlap["overlap_area"] / buffer_area
         population = (overlap["Total Population"] * overlap["weight"]).sum()
 
@@ -272,3 +276,13 @@ ax.set_title("Existing Grocery Stores in Boston")
 plt.tight_layout()
 plt.show()
 
+
+
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="invalid value encountered in intersection")
+    candidate_cells["reachable_area"] = (
+        candidate_cells.geometry
+        .buffer(CELLSIZE)
+        .intersection(boston_boundary)
+    )
