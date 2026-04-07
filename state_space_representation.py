@@ -85,21 +85,6 @@ grid = gpd.GeoDataFrame(geometry=grid_cells, crs=neighborhoods.crs)
 print("units=", neighborhoods.crs)
 
 # Define Logan exclusion zone (in EPSG:4326, then convert to match neighborhoods CRS)
-logan = Polygon([
-    (-71.0305, 42.3708),
-    (-71.0240, 42.3755),
-    (-71.0100, 42.3785),
-    (-70.9950, 42.3740),
-    (-70.9875, 42.3655),
-    (-70.9855, 42.3550),
-    (-70.9920, 42.3465),
-    (-71.0050, 42.3435),
-    (-71.0180, 42.3455),
-    (-71.0265, 42.3525),
-    (-71.0310, 42.3605),
-    (-71.0305, 42.3708) 
-])
-
 logan_wgs84 = Polygon([
     [
         -71.0312994,
@@ -135,8 +120,7 @@ logan_gdf = gpd.GeoDataFrame(geometry=[logan_wgs84], crs="EPSG:4326")
 logan_gdf = logan_gdf.to_crs(neighborhoods.crs)  # converts to ftUS, will line up correctly
 logan_polygon = logan_gdf.geometry.iloc[0]
 logan_polygon = logan_polygon.buffer(0)
-print("units=", neighborhoods.crs.axis_info)       # confirms units
-print("bounds=", neighborhoods.total_bounds) 
+
 # cells should only overlap Boston but exclude airport
 boston_boundary = neighborhoods.union_all()
 valid_area = boston_boundary.difference(logan_polygon)
