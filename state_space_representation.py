@@ -4,10 +4,13 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from shapely.geometry import box
 import pandas as pd
+from shapely.geometry import Polygon
 import warnings
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-N_STORES       = 10
-CELLSIZE = 5000
+N_STORES = 10
+CELLSIZE = 2640
 MUTATION_RATE  = 0.7
 MULTISWAP_PROB = 0.15
 
@@ -79,10 +82,65 @@ for x in cols:
         grid_cells.append(cell)
 
 grid = gpd.GeoDataFrame(geometry=grid_cells, crs=neighborhoods.crs)
+print("units=", neighborhoods.crs)
 
-# cells should only overlap Boston
+# Define Logan exclusion zone (in EPSG:4326, then convert to match neighborhoods CRS)
+logan = Polygon([
+    (-71.0305, 42.3708),
+    (-71.0240, 42.3755),
+    (-71.0100, 42.3785),
+    (-70.9950, 42.3740),
+    (-70.9875, 42.3655),
+    (-70.9855, 42.3550),
+    (-70.9920, 42.3465),
+    (-71.0050, 42.3435),
+    (-71.0180, 42.3455),
+    (-71.0265, 42.3525),
+    (-71.0310, 42.3605),
+    (-71.0305, 42.3708) 
+])
+
+logan_wgs84 = Polygon([
+    [
+        -71.0312994,
+        42.3543855
+      ],
+      [
+        -70.9962613,
+        42.3389072
+      ],
+      [
+        -70.971185,
+        42.3630112
+      ],
+      [
+        -70.9990094,
+        42.3850773
+      ],
+      [
+        -71.0127498,
+        42.3873595
+      ],
+      [
+        -71.0292383,
+        42.3756938
+      ],
+      [
+        -71.0323299,
+        42.3554004
+      ]
+])
+
+logan_gdf = gpd.GeoDataFrame(geometry=[logan_wgs84], crs="EPSG:4326")
+logan_gdf = logan_gdf.to_crs(neighborhoods.crs)  # converts to ftUS, will line up correctly
+logan_polygon = logan_gdf.geometry.iloc[0]
+logan_polygon = logan_polygon.buffer(0)
+print("units=", neighborhoods.crs.axis_info)       # confirms units
+print("bounds=", neighborhoods.total_bounds) 
+# cells should only overlap Boston but exclude airport
 boston_boundary = neighborhoods.union_all()
-grid["in_boston"] = grid.geometry.intersects(boston_boundary)
+valid_area = boston_boundary.difference(logan_polygon)
+grid["in_boston"] = grid.geometry.intersects(valid_area)
 candidates = grid[grid["in_boston"]].copy().reset_index(drop=True)
 
 # Give each cell its own index
@@ -150,7 +208,7 @@ def income_fitness_func(candidate):
 
     overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
     
-    income = (overlap["Total Population"] * overlap["weight"]).sum()
+    income = (overlap["Median Household Income"] * overlap["weight"]).sum()
         
     if income == 0:
         return -1000
@@ -214,7 +272,7 @@ def selection(pop, fitness, k):
     competitors = np.random.choice(len(pop), size=k, replace=False) #select k random chromosomes to comapare
     winner = competitors[0]
     for i in competitors:
-        if fitness[i] < fitness[winner]:
+        if fitness[i] > fitness[winner]:
             winner = i
     return pop[winner]
 
@@ -309,12 +367,3 @@ plt.tight_layout()
 plt.show()
 
 
-
-
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", message="invalid value encountered in intersection")
-    candidate_cells["reachable_area"] = (
-        candidate_cells.geometry
-        .buffer(CELLSIZE)
-        .intersection(boston_boundary)
-    )
