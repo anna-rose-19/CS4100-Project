@@ -1,11 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from state_space_representation import candidates, neighborhoods, fitness_func, CELLSIZE, n
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # ── config ───────────────────────────────────────────────────────────────────
 N_STORES       = 10
 POP_SIZE       = 50
-N_GENERATIONS  = 200
+N_GENERATIONS  = 60
 ELITE_K        = 5
 TOURNAMENT_K   = 4
 MUTATION_RATE  = 0.7
@@ -56,6 +58,7 @@ def tournament_select(population, fitnesses):
     idxs = np.random.choice(len(population), size=TOURNAMENT_K, replace=False)
     best = idxs[np.argmax([fitnesses[i] for i in idxs])]
     return population[best]
+
 
 # ── main GA loop ──────────────────────────────────────────────────────────────
 def run_ga():
