@@ -9,8 +9,8 @@ import warnings
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-N_STORES = 10
-CELLSIZE = 2640
+N_STORES       = 10
+CELLSIZE = 3500
 MUTATION_RATE  = 0.7
 MULTISWAP_PROB = 0.15
 
@@ -200,7 +200,18 @@ def income_fitness_func(candidate):
     #print(income_coeff)
     return income_coeff
 
+def penalize_new_store_clustering(candidate, candidate_cells):
+    penalty = 0
+    for _, other in candidate_cells.iterrows():
+        if candidate["cell_idx"] == other["cell_idx"]:
+            continue
+        dist = candidate.geometry.centroid.distance(other.geometry.centroid)
+        if dist < CELLSIZE:
+            penalty += 1
+    return penalty
+
 def fitness_func(chromosome):
+
     candidate_cells = candidates[chromosome == 1].copy()
     total_score = 0
     for _, candidate in candidate_cells.iterrows():
@@ -227,15 +238,25 @@ def fitness_func(chromosome):
         # for example if the candidate cell has 10,000 people in it and the nearby stores 
         # are already serving 7,000 of those people, then the coverage ratio would be 0.7.
         coverage_ratio = min(already_served / population if population > 0 else 1, 1)
+        exisitng_store_penality = np.exp(-5 * coverage_ratio)  
 
         health = (overlap["Estimate"] * overlap["weight"]).sum()
+
+        dists = candidate_cells.geometry.centroid.distance(candidate.geometry.centroid)
+        cluster_penalty = np.sum(np.exp(-dists / CELLSIZE)) - 1
+        cluster_factor = np.exp(-cluster_penalty)
+        population_term = np.sqrt(population)
+
 
         #print("Weights:", overlap["weight"].values) 
         #print("Sum of weights:", overlap["weight"].sum())
 
         # so this would be (0.5 * 10000)(1 - 0.7) = 1,500
         #  So placing a store here only gives you 30% of the reward you'd get in a completely uncovered area.
-        score = ((0.5 * population)*(1 - coverage_ratio) + (0.3 * health) + income_fitness_func(candidate) * population)
+        #score = ((0.5 * population) + exisitng_store_penality + income_fitness_func(candidate) * population) * (1 + health/100)  # add 1 to make sure we don't lose points for negative health scores
+        score = (population_term * (income_fitness_func(candidate) * population)) \
+        * exisitng_store_penality  * cluster_factor \
+        * (1 + health/100)
         #print(f"Candidate cell {candidate['cell_idx']}")
         #print(f"Population {population:.2f})")
         #print(f"Health {health:.2f}")
@@ -349,5 +370,3 @@ ax.legend()
 ax.set_title("Existing Grocery Stores in Boston")
 plt.tight_layout()
 plt.show()
-
-
