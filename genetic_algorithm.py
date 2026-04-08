@@ -5,7 +5,7 @@ from state_space_representation import candidates, neighborhoods, fitness_func, 
 # ── config ───────────────────────────────────────────────────────────────────
 N_STORES       = 10
 POP_SIZE       = 50
-N_GENERATIONS  = 200
+N_GENERATIONS  = 30
 ELITE_K        = 5
 TOURNAMENT_K   = 4
 MUTATION_RATE  = 0.7
@@ -38,7 +38,7 @@ def mutate(chromosome, multiswap_prob=0.15, n_multiswap=3):
     return mutate_swap(chromosome, n_swaps=1)
 
 # ── crossover ─────────────────────────────────────────────────────────────────
-def crossover(parent_a, parent_b):
+#def crossover(parent_a, parent_b):
     child    = np.zeros(n, dtype=int)
     both_on  = np.where((parent_a == 1) & (parent_b == 1))[0]
     a_only   = np.where((parent_a == 1) & (parent_b == 0))[0]
@@ -85,7 +85,7 @@ def run_ga():
         while len(new_pop) < POP_SIZE:
             pa    = tournament_select(population, fitnesses)
             pb    = tournament_select(population, fitnesses)
-            child = crossover(pa, pb)
+            child = pa.copy()
             child = mutate(child, multiswap_prob, n_multiswap)
             new_pop.append(child)
 
@@ -147,3 +147,4 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("best_placement.png", dpi=150)
     plt.show()
+
