@@ -4,23 +4,23 @@ from state_space_representation import candidates, neighborhoods, fitness_func, 
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-# ── config ───────────────────────────────────────────────────────────────────
+# config 
 N_STORES       = 10
 POP_SIZE       = 50
-N_GENERATIONS  = 60
-ELITE_K        = 5
+N_GENERATIONS  = 100
+ELITE_K        = 10
 TOURNAMENT_K   = 4
 MUTATION_RATE  = 0.7
 MULTISWAP_PROB = 0.15
 N_MULTISWAP    = 3
 
-# ── chromosome helpers ────────────────────────────────────────────────────────
+# random chromosome generator
 def random_chromosome():
     chrom = np.zeros(n, dtype=int)
     chrom[np.random.choice(n, size=N_STORES, replace=False)] = 1
     return chrom
 
-# ── mutation ──────────────────────────────────────────────────────────────────
+# mutation 
 def mutate_swap(chromosome, n_swaps=1):
     mutant = chromosome.copy()
     store_idxs = np.where(mutant == 1)[0]
@@ -39,31 +39,27 @@ def mutate(chromosome, multiswap_prob=0.15, n_multiswap=3):
         return mutate_swap(chromosome, n_swaps=n_multiswap)
     return mutate_swap(chromosome, n_swaps=1)
 
-# ── crossover ─────────────────────────────────────────────────────────────────
-def crossover(parent_a, parent_b):
-    child    = np.zeros(n, dtype=int)
-    both_on  = np.where((parent_a == 1) & (parent_b == 1))[0]
-    a_only   = np.where((parent_a == 1) & (parent_b == 0))[0]
-    b_only   = np.where((parent_a == 0) & (parent_b == 1))[0]
-    child[both_on] = 1
-    still_needed = N_STORES - len(both_on)
-    if still_needed > 0:
-        contested = np.concatenate([a_only, b_only])
-        np.random.shuffle(contested)
-        child[contested[:still_needed]] = 1
-    return child
-
-# ── selection ─────────────────────────────────────────────────────────────────
+# selection 
 def tournament_select(population, fitnesses):
     idxs = np.random.choice(len(population), size=TOURNAMENT_K, replace=False)
     best = idxs[np.argmax([fitnesses[i] for i in idxs])]
     return population[best]
 
+# pop is all generated chromosomes, fitness is an array of their scores, 
+# and k is how many we are comapring for the tournament selection.
+# we will run this 4? times to select parents for next gen --> not most greedy solution but prevents local optima
+def selection(pop, fitness, k): 
+    competitors = np.random.choice(len(pop), size=k, replace=False) #select k random chromosomes to comapare
+    winner = competitors[0]
+    for i in competitors:
+        if fitness[i] > fitness[winner]:
+            winner = i
+    return pop[winner]
 
-# ── main GA loop ──────────────────────────────────────────────────────────────
+# main GA loop 
 def run_ga():
-    population = [random_chromosome() for _ in range(POP_SIZE)]
-    fitnesses  = [fitness_func(c) for c in population]
+    population = [random_chromosome() for _ in range(POP_SIZE)] #generates a random chromosome 
+    fitnesses  = [fitness_func(c) for c in population] 
 
     best_score      = max(fitnesses)
     best_chromosome = population[np.argmax(fitnesses)].copy()
@@ -84,11 +80,10 @@ def run_ga():
         elite_idxs = np.argsort(fitnesses)[-ELITE_K:]
         new_pop    = [population[i].copy() for i in elite_idxs]
 
-        # fill rest of population
-        while len(new_pop) < POP_SIZE:
-            pa    = tournament_select(population, fitnesses)
-            pb    = tournament_select(population, fitnesses)
-            child = crossover(pa, pb)
+        #non-elite pop tournament selection
+        while len(new_pop) < (POP_SIZE):
+            child = selection(population, fitnesses, 4)
+            new_pop.append(child)
             child = mutate(child, multiswap_prob, n_multiswap)
             new_pop.append(child)
 
@@ -109,7 +104,7 @@ def run_ga():
         else:
             plateau_counter += 1
 
-        # adaptive mutation — kick harder if stuck
+        # adaptive mutation — kick harder if stuck - GET RID OF
         if plateau_counter > 20:
             multiswap_prob = min(multiswap_prob + 0.05, 0.5)
             n_multiswap    = min(n_multiswap + 1, N_STORES // 2)
