@@ -1,13 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from state_space_representation import candidates, neighborhoods, fitness_func, CELLSIZE, n
+from state_space_representation import candidates, neighborhoods, fitness_func, CELLSIZE, n, get_original_boston_stats, evaluate_chromosome, print_results
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # ── config ───────────────────────────────────────────────────────────────────
 N_STORES       = 10
 POP_SIZE       = 50
-N_GENERATIONS  = 60
+N_GENERATIONS  = 30
 ELITE_K        = 5
 TOURNAMENT_K   = 4
 MUTATION_RATE  = 0.7
@@ -150,3 +150,10 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("best_placement.png", dpi=150)
     plt.show()
+
+    # print metrics for best chromosome
+    print(f"\n=== final best | score: {best_score:,.0f} ===")
+    og_stats = get_original_boston_stats()  
+    results = evaluate_chromosome(best_chrom, og_stats)  
+    print_results(results)  
+    print(results["new_people"])
