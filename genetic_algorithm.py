@@ -2,12 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from state_space_representation import candidates, neighborhoods, fitness_func, CELLSIZE, n
 import warnings
+import print_metrics
+from print_metrics import get_original_boston_stats, evaluate_chromosome, print_results
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # config 
 N_STORES       = 10
 POP_SIZE       = 50
-N_GENERATIONS  = 100
+N_GENERATIONS  = 60
 ELITE_K        = 10
 TOURNAMENT_K   = 4
 MUTATION_RATE  = 0.7
@@ -39,11 +41,7 @@ def mutate(chromosome, multiswap_prob=0.15, n_multiswap=3):
         return mutate_swap(chromosome, n_swaps=n_multiswap)
     return mutate_swap(chromosome, n_swaps=1)
 
-# selection 
-def tournament_select(population, fitnesses):
-    idxs = np.random.choice(len(population), size=TOURNAMENT_K, replace=False)
-    best = idxs[np.argmax([fitnesses[i] for i in idxs])]
-    return population[best]
+
 
 # pop is all generated chromosomes, fitness is an array of their scores, 
 # and k is how many we are comapring for the tournament selection.
@@ -145,3 +143,10 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("best_placement.png", dpi=150)
     plt.show()
+
+     # print metrics for best chromosome
+    print(f"\n=== final best | score: {best_score:,.0f} ===")
+    og_stats = get_original_boston_stats()  
+    results = evaluate_chromosome(best_chrom, og_stats)  
+    print_results(results)  
+    print(results["new_people"])
