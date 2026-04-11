@@ -9,7 +9,7 @@ import warnings
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-N_STORES       = 10
+N_STORES       = 13
 CELLSIZE = 3500
 MUTATION_RATE  = 0.7
 MULTISWAP_PROB = 0.15
@@ -153,31 +153,34 @@ stores_gdf = gpd.GeoDataFrame(
 # the store coordinates are in lat/lon but the map is in meters. 
 # this converts the stores to the same system as the map so they line up correctly.
 stores_gdf = stores_gdf.to_crs(neighborhoods.crs)
+store_coverage = {}
 
-def penalize_existing_stores(candidate, neighborhoods, existing_stores_gdf, CELLSIZE):
+for store_idx, store in stores_gdf.iterrows():
+    store_area = gpd.GeoDataFrame(
+        geometry=[store.geometry.buffer(CELLSIZE)],
+        crs=stores_gdf.crs
+    )
+    store_overlap = gpd.overlay(neighborhoods, store_area, how="intersection")
+    if store_overlap.empty:
+        store_coverage[store_idx] = 0
+        continue
+    store_overlap["overlap_area"] = store_overlap.geometry.area
+    store_overlap["weight"] = store_overlap["overlap_area"] / store_overlap["orig_area"]
+    store_coverage[store_idx] = (
+        store_overlap["Total Population"] * store_overlap["weight"]
+    ).sum()
+
+def penalize_existing_stores(candidate, existing_stores_gdf, store_coverage, CELLSIZE):
     candidate_center = candidate.geometry.centroid
     nearby_stores = existing_stores_gdf[
         existing_stores_gdf.geometry.distance(candidate_center) <= CELLSIZE
     ]
-    already_served = 0
-    for _, store in nearby_stores.iterrows():
-        store_area = gpd.GeoDataFrame(
-            geometry=[store.geometry.buffer(CELLSIZE)],
-            crs=existing_stores_gdf.crs
-        )
-        store_overlap = gpd.overlay(neighborhoods, store_area, how="intersection")
-        if store_overlap.empty:
-            continue
-        store_overlap["overlap_area"] = store_overlap.geometry.area
-        store_overlap["weight"] = store_overlap["overlap_area"] / store_overlap["orig_area"]
-        already_served += (store_overlap["Total Population"] * store_overlap["weight"]).sum()
-
+    already_served = sum(store_coverage[idx] for idx in nearby_stores.index)
     return already_served
 
 candidate_cells = candidates[chromosome == 1].copy()
 candidate_cells["reachable_area"] = candidate_cells.geometry.buffer(CELLSIZE)  
 print(neighborhoods.columns)
-
 
 def income_fitness_func(candidate):
     area = gpd.GeoDataFrame(
@@ -191,24 +194,13 @@ def income_fitness_func(candidate):
     num_regions = len(overlap)
 
     overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
-    
+
     income = (overlap["Median Household Income"] * overlap["weight"]).sum()
-        
+
     if income == 0:
         return -1000
     income_coeff = (1 / (income/num_regions))
-    #print(income_coeff)
     return income_coeff
-
-def penalize_new_store_clustering(candidate, candidate_cells):
-    penalty = 0
-    for _, other in candidate_cells.iterrows():
-        if candidate["cell_idx"] == other["cell_idx"]:
-            continue
-        dist = candidate.geometry.centroid.distance(other.geometry.centroid)
-        if dist < CELLSIZE:
-            penalty += 1
-    return penalty
 
 def fitness_func(chromosome):
 
@@ -223,22 +215,18 @@ def fitness_func(chromosome):
         if overlap.empty:
             continue
         overlap["overlap_area"] = overlap.geometry.area
-
-
-        #overlap["weight"] = overlap["overlap_area"] / overlap["orig_area"]
-    
         buffer_area = area.geometry.area.iloc[0]
         
         overlap["weight"] = overlap["overlap_area"] / buffer_area
         population = (overlap["Total Population"] * overlap["weight"]).sum()
-
-        already_served = penalize_existing_stores(candidate, neighborhoods, stores_gdf, CELLSIZE)
+        
+        already_served = penalize_existing_stores(candidate, stores_gdf, store_coverage, CELLSIZE)
 
         # gives what percentage of the population in the candidate cell is already being served by an existing store.
         # for example if the candidate cell has 10,000 people in it and the nearby stores 
         # are already serving 7,000 of those people, then the coverage ratio would be 0.7.
         coverage_ratio = min(already_served / population if population > 0 else 1, 1)
-        exisitng_store_penality = np.exp(-5 * coverage_ratio)  
+        existing_store_penalty = np.exp(-5 * coverage_ratio)  
 
         health = (overlap["Estimate"] * overlap["weight"]).sum()
 
@@ -255,7 +243,7 @@ def fitness_func(chromosome):
         #  So placing a store here only gives you 30% of the reward you'd get in a completely uncovered area.
         #score = ((0.5 * population) + exisitng_store_penality + income_fitness_func(candidate) * population) * (1 + health/100)  # add 1 to make sure we don't lose points for negative health scores
         score = (population_term * (income_fitness_func(candidate) * population)) \
-        * exisitng_store_penality  * cluster_factor \
+        * existing_store_penalty  * cluster_factor \
         * (1 + health/100)
         #print(f"Candidate cell {candidate['cell_idx']}")
         #print(f"Population {population:.2f})")
@@ -270,57 +258,9 @@ if __name__ == "__main__":
     print("Fitness score: ")
     print(score)
 
-# pop is all generated chromosomes, fitness is an array of their scores, 
-# and k is how many we are comapring for the tournament selection.
-# we will run this 4? times to select parents for next gen --> not most greedy solution but prevents local optima
-def selection(pop, fitness, k): 
-    competitors = np.random.choice(len(pop), size=k, replace=False) #select k random chromosomes to comapare
-    winner = competitors[0]
-    for i in competitors:
-        if fitness[i] > fitness[winner]:
-            winner = i
-    return pop[winner]
 
-def mutate_swap(chromosome, n_swaps=1):
-    """
-    Move n_swaps stores to randomly chosen empty cells.
-    Always preserves exactly N_STORES stores in the chromosome.
-    """
-    mutant = chromosome.copy()
-    store_idxs = np.where(mutant == 1)[0]
-    empty_idxs = np.where(mutant == 0)[0]
 
-    n_swaps = min(n_swaps, len(store_idxs), len(empty_idxs))
 
-    removes = np.random.choice(store_idxs, size=n_swaps, replace=False)
-    adds    = np.random.choice(empty_idxs,  size=n_swaps, replace=False)
-
-    mutant[removes] = 0
-    mutant[adds]    = 1
-
-    return mutant
-
-def mutate(chromosome):
-    if np.random.rand() > MUTATION_RATE:
-        return chromosome.copy()           # no mutation
-
-    if np.random.rand() < MULTISWAP_PROB:
-        return mutate_swap(chromosome, n_swaps=3)  # big jump
-    
-    return mutate_swap(chromosome, n_swaps=1)      # small move
-
-def new_generation(pop, fitness, num_children):
-    new_pop = []
-    init = num_children / 2 - 1
-    for _ in range(init):
-        parent = selection(pop, fitness, k=4)
-        new_pop.append(parent)
-        child = mutate(parent)
-        new_pop.append(child)
-    rand = num_children - len(new_pop)
-    #for _ in range(rand):
-        #randomly generate new chromosome to maintain diversity
-    return np.array(new_pop)
 
 ## PLOTS TO SEE 
 fig, axes = plt.subplots(1, 3, figsize=(22, 8))
