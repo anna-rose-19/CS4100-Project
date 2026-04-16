@@ -1,14 +1,13 @@
 # Optimal Grocery Store Placements for Food Deserts in Boston
 This project aims to use a genetic algorithm to suggest 10 placements for new grocery stores in the city of Boston to best serve the community. The specific goals are to priotize the maximum number of people served, low-income communities, and neighbordhoods with below average cardiac health, all while avoiding areas already served by a grocery store. This project is not concerned with smaller markets and bodegas, but rather large scale grocery stores that tend to be cheaper and have healthier food options than those previously mentioned. 
 
-# Running the Code
+## Running the Code
 ### Clone the repository
-``` git clone https://github.com/anna-rose-19/CS4100-Project
-```
+``` git clone https://github.com/anna-rose-19/CS4100-Project```
+
 ### Install all requirements
 This code uses python=3.13.9
-```pip install -r requirements.txt
-```
+```pip install -r requirements.txt```
 
 ### Optionally change parameters
 These values were decided upon for our results, hwoever they can be altered for further experimentation
@@ -28,13 +27,13 @@ Exit out of the original map pop ups to allow algorithm to continue.
 One the algorithm finishes running, a map of Boston will appear with 10 stores placed in locations that yielded high fitness scores. A graph displaying convergence will also appear. In the terminal, relevant metrics will print. 
 
 
-# Future Direction
+## Future Direction
 This project can be improved by considering: 
 - Store proximity to public transit to allow for further accessibility
 - Consideration of ethnic data in the store's reach to effectively serve the people there
 - Updated datasets for more accuracy in health, income, and existing store data
 
-# Collaborators
+## Collaborators
 The individuals listed below contributed to the creation of this project and are available for further questions at the email addresses listed:
 - Anna Rose (rose.anna@northeastern.edu)
 - Anushka Poddar (poddar.an@northeastern.edu)
